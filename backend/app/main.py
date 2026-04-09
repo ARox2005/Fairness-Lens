@@ -4,9 +4,9 @@ FairnessLens API — Main Entry Point
 A production-grade AI fairness auditing platform built for
 Google Solution Challenge 2026 India (Unbiased AI Decision theme).
 
-Pipeline: Inspect → Measure → Flag → Fix
+Pipeline: Inspect → Measure → Flag → Fix (+ RL Optimizer)
 
-Tech stack: FastAPI + AIF360 + Fairlearn + Gemini API
+Tech stack: FastAPI + AIF360 + Fairlearn + Gemini API + DQN
 Deployed on: Render (backend) + Vercel (frontend)
 """
 
@@ -49,7 +49,7 @@ app = FastAPI(
     description=(
         "AI Bias Detection & Mitigation Platform. "
         "Inspect, Measure, Flag, and Fix bias in datasets and ML models. "
-        "Built with FastAPI, AIF360, Fairlearn, and Google Gemini API."
+        "Built with FastAPI, AIF360, Fairlearn, Google Gemini API, and DQN Reinforcement Learning."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -57,12 +57,13 @@ app = FastAPI(
 
 # ── CORS Configuration ──
 # In production, set CORS_ORIGINS env var in Render dashboard to your Vercel URL
+# (e.g. "https://fairness-lens.vercel.app")
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 cors_origins = [o.strip() for o in cors_origins if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # allow any Vercel preview URL
+    allow_origin_regex=r"https://.*\.vercel\.app",  # allow all Vercel preview URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -89,6 +90,7 @@ async def root():
         "version": "1.0.0",
         "status": "healthy",
         "pipeline": ["inspect", "measure", "flag", "fix"],
+        "advanced_features": ["agent", "redteam", "counterfactual", "rl_fix"],
         "docs": "/docs",
     }
 

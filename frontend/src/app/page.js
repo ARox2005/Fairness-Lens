@@ -14,7 +14,9 @@ import RLFixStep from "@/components/steps/RLFixStep";
 import AgentPanel from "@/components/steps/AgentPanel";
 import RedTeamPanel from "@/components/steps/RedTeamPanel";
 import CounterfactualPanel from "@/components/steps/CounterfactualPanel";
-import { apiFetch, apiUpload, DEMO_META, wakeBackend } from "@/lib/api";
+import { apiFetch, apiUpload, DEMO_META } from "@/lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function Home() {
   // Theme
@@ -23,11 +25,6 @@ export default function Home() {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
 
-  // Wake backend on mount (handles Render cold start)
-  useEffect(() => {
-    wakeBackend();
-  }, []);
-
   // Pipeline state
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -35,8 +32,6 @@ export default function Home() {
   const [agentMode, setAgentMode] = useState(false);
   const [redTeamMode, setRedTeamMode] = useState(false);
   const [counterfactualMode, setCounterfactualMode] = useState(false);
-  const [rlMode, setRlMode] = useState(false);
-  const [comparing, setComparing] = useState(false);
 
   // Data state
   const [datasetId, setDatasetId] = useState(null);
@@ -45,7 +40,11 @@ export default function Home() {
   const [measureData, setMeasureData] = useState(null);
   const [flagData, setFlagData] = useState(null);
   const [fixData, setFixData] = useState(null);
+
+  // RL state
   const [rlData, setRlData] = useState(null);
+  const [rlMode, setRlMode] = useState(false);
+  const [comparing, setComparing] = useState(false);
   const [comparisonData, setComparisonData] = useState(null);
 
   // Completed steps for sidebar
@@ -68,6 +67,7 @@ export default function Home() {
       setFlagData(null);
       setFixData(null);
       setRlData(null);
+      setRlMode(false);
       setComparisonData(null);
       setStep(1);
     } catch (e) {
@@ -106,6 +106,7 @@ export default function Home() {
       setFlagData(null);
       setFixData(null);
       setRlData(null);
+      setRlMode(false);
       setComparisonData(null);
       setStep(1);
     } catch (e) {
@@ -123,11 +124,12 @@ export default function Home() {
     setFlagData(null);
     setFixData(null);
     setRlData(null);
+    setRlMode(false);
     setComparisonData(null);
     setStep(1);
   }, []);
 
-  // ── Agent mode: populate all data from agent results ──
+  // ── Agent mode ──
   const handleAgentComplete = useCallback((agentResult) => {
     if (agentResult.inspect_data) setInspectData(agentResult.inspect_data);
     if (agentResult.measure_data) setMeasureData(agentResult.measure_data);
@@ -183,7 +185,7 @@ export default function Home() {
     setLoading(false);
   }, [datasetId, meta]);
 
-  // ── Step 4: Fix (standard mitigation) ──
+  // ── Step 4a: Standard Fix ──
   const runFix = useCallback(async () => {
     if (!datasetId || !meta) return;
     setLoading(true);
@@ -209,24 +211,32 @@ export default function Home() {
     setLoading(false);
   }, [datasetId, meta]);
 
-  // ── Step 4b: RL Fix Optimizer ──
+  // ── Step 4b: RL Fix ──
   const runRLFix = useCallback(async () => {
     if (!datasetId || !meta) return;
     setLoading(true);
     setError(null);
     setRlMode(true);
+    setComparisonData(null);
     try {
-      const data = await apiFetch("/api/rl-fix/optimize", {
+      const res = await fetch(`${API_BASE}/api/rl-fix/`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dataset_id: datasetId,
-          protected_attribute: meta.protected_attributes[0],
+          protected_attributes: meta.protected_attributes,
           label_column: meta.label_column,
           favorable_label: meta.favorable_label,
+          num_episodes: 80,
+          max_steps: 5,
         }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "RL optimization failed");
+      }
+      const data = await res.json();
       setRlData(data);
-      setComparisonData(null);
       setStep(4);
     } catch (e) {
       setError(e.message);
@@ -234,21 +244,26 @@ export default function Home() {
     setLoading(false);
   }, [datasetId, meta]);
 
-  // ── Step 4c: Compare RL vs Standard ──
+  // ── Compare RL vs Standard ──
   const runComparison = useCallback(async () => {
     if (!datasetId || !meta) return;
     setComparing(true);
-    setError(null);
     try {
-      const data = await apiFetch("/api/rl-fix/compare", {
+      const res = await fetch(`${API_BASE}/api/rl-fix/compare`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           dataset_id: datasetId,
-          protected_attribute: meta.protected_attributes[0],
+          protected_attributes: meta.protected_attributes,
           label_column: meta.label_column,
           favorable_label: meta.favorable_label,
         }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || "Comparison failed");
+      }
+      const data = await res.json();
       setComparisonData(data);
     } catch (e) {
       setError(e.message);
@@ -256,21 +271,12 @@ export default function Home() {
     setComparing(false);
   }, [datasetId, meta]);
 
-  // Next action for each step
-  const nextActions = [
-    null,
-    { label: "Run Fairness Metrics", action: runMeasure, Icon: BarChart3 },
-    { label: "Flag Bias Issues", action: runFlag, Icon: AlertTriangle },
-    { label: "Apply Mitigation", action: runFix, Icon: Wrench },
-    null,
-  ];
-
   const loadingMessages = [
     "Loading dataset and running inspection...",
     "Computing all fairness metrics...",
     "Generating bias flags and compliance checks...",
     rlMode
-      ? "Training RL agent (this may take 30-60 seconds)..."
+      ? "Training DQN agent — discovering optimal mitigation sequence..."
       : "Applying mitigation techniques...",
     "Processing...",
   ];
@@ -304,6 +310,8 @@ export default function Home() {
               {step === 3 && counterfactualMode && (
                 <CounterfactualPanel datasetId={datasetId} meta={meta} />
               )}
+
+              {/* Step 4: Standard Fix or RL Fix */}
               {step === 4 && !rlMode && (
                 <FixStep data={fixData} inspectData={inspectData} measureData={measureData} flagData={flagData} datasetId={datasetId} />
               )}
@@ -316,7 +324,7 @@ export default function Home() {
                 />
               )}
 
-              {/* Counterfactual toggle + Apply Mitigation on Flag step */}
+              {/* ═══ FLAG STEP BOTTOM BUTTONS ═══ */}
               {!loading && step === 3 && !counterfactualMode && (
                 <div className="mt-6 flex flex-wrap gap-2">
                   <button
@@ -329,22 +337,22 @@ export default function Home() {
                     <Shuffle size={16} /> Counterfactual Stories
                   </button>
                   <div className="flex-1" />
-                  <button
-                    onClick={runRLFix}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
-                               bg-gradient-to-r from-violet-600 to-fuchsia-500
-                               hover:from-violet-700 hover:to-fuchsia-600
-                               shadow-md transition-all cursor-pointer"
-                  >
-                    <Brain size={16} /> RL Optimizer
-                  </button>
                   <button onClick={runFix} className="btn-primary">
                     <Wrench size={16} /> Apply Mitigation <ChevronRight size={16} />
+                  </button>
+                  <button
+                    onClick={runRLFix}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white
+                               bg-gradient-to-r from-violet-600 to-fuchsia-500
+                               hover:from-violet-700 hover:to-fuchsia-600
+                               shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
+                  >
+                    <Brain size={16} /> Apply Mitigation with RL <ChevronRight size={16} />
                   </button>
                 </div>
               )}
               {!loading && step === 3 && counterfactualMode && (
-                <div className="mt-4 flex gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     onClick={() => setCounterfactualMode(false)}
                     className="btn-secondary text-xs"
@@ -352,22 +360,60 @@ export default function Home() {
                     ← Back to Flags
                   </button>
                   <div className="flex-1" />
-                  <button
-                    onClick={() => { setCounterfactualMode(false); runRLFix(); }}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
-                               bg-gradient-to-r from-violet-600 to-fuchsia-500
-                               hover:from-violet-700 hover:to-fuchsia-600
-                               shadow-md transition-all cursor-pointer"
-                  >
-                    <Brain size={16} /> RL Optimizer
-                  </button>
                   <button onClick={() => { setCounterfactualMode(false); runFix(); }} className="btn-primary">
                     <Wrench size={16} /> Apply Mitigation <ChevronRight size={16} />
+                  </button>
+                  <button
+                    onClick={() => { setCounterfactualMode(false); runRLFix(); }}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white
+                               bg-gradient-to-r from-violet-600 to-fuchsia-500
+                               hover:from-violet-700 hover:to-fuchsia-600
+                               shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
+                  >
+                    <Brain size={16} /> Apply Mitigation with RL <ChevronRight size={16} />
                   </button>
                 </div>
               )}
 
-              {/* Mode toggles on Inspect step */}
+              {/* Step 4: toggle between views + try the other approach */}
+              {!loading && step === 4 && (fixData || rlData) && (
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {rlMode && fixData && (
+                    <button onClick={() => setRlMode(false)} className="btn-secondary text-xs">
+                      <Wrench size={14} /> View Standard Results
+                    </button>
+                  )}
+                  {!rlMode && rlData && (
+                    <button
+                      onClick={() => setRlMode(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
+                                 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400
+                                 border border-violet-200 dark:border-violet-700
+                                 hover:bg-violet-200 dark:hover:bg-violet-800/40 transition-all cursor-pointer"
+                    >
+                      <Brain size={14} /> View RL Results
+                    </button>
+                  )}
+                  {!rlMode && !rlData && (
+                    <button
+                      onClick={runRLFix}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium
+                                 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400
+                                 border border-violet-200 dark:border-violet-700
+                                 hover:bg-violet-200 dark:hover:bg-violet-800/40 transition-all cursor-pointer"
+                    >
+                      <Brain size={14} /> Also Try RL Mitigation
+                    </button>
+                  )}
+                  {rlMode && !fixData && (
+                    <button onClick={runFix} className="btn-secondary text-xs">
+                      <Wrench size={14} /> Also Try Standard Mitigation
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Inspect step: mode toggles + next */}
               {!loading && step === 1 && !agentMode && !redTeamMode && (
                 <div className="mt-6 space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -407,69 +453,14 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Toggle between Standard Fix and RL Fix on Step 4 */}
-              {!loading && step === 4 && (fixData || rlData) && (
-                <div className="mt-4 flex gap-2 flex-wrap">
-                  {fixData && (
-                    <button
-                      onClick={() => setRlMode(false)}
-                      className={`text-xs px-3 py-2 rounded-lg font-medium transition-all cursor-pointer
-                        ${!rlMode
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-700"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700"
-                        }`}
-                    >
-                      <Wrench size={12} className="inline mr-1" /> Standard Mitigation
-                    </button>
-                  )}
-                  {rlData && (
-                    <button
-                      onClick={() => setRlMode(true)}
-                      className={`text-xs px-3 py-2 rounded-lg font-medium transition-all cursor-pointer
-                        ${rlMode
-                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 border border-violet-300 dark:border-violet-700"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700"
-                        }`}
-                    >
-                      <Brain size={12} className="inline mr-1" /> RL Optimizer
-                    </button>
-                  )}
-                  <div className="flex-1" />
-                  {!rlData && (
-                    <button
-                      onClick={runRLFix}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white
-                                 bg-gradient-to-r from-violet-600 to-fuchsia-500
-                                 hover:from-violet-700 hover:to-fuchsia-600
-                                 shadow-sm transition-all cursor-pointer"
-                    >
-                      <Brain size={12} /> Also Try RL Optimizer
-                    </button>
-                  )}
-                  {!fixData && (
-                    <button
-                      onClick={runFix}
-                      className="btn-secondary text-xs"
-                    >
-                      <Wrench size={12} /> Also Try Standard
-                    </button>
-                  )}
+              {/* Next step button for step 2 */}
+              {!loading && step === 2 && (
+                <div className="mt-6 flex justify-end">
+                  <button onClick={runFlag} className="btn-primary">
+                    <AlertTriangle size={16} /> Flag Bias Issues <ChevronRight size={16} />
+                  </button>
                 </div>
               )}
-
-              {/* Next step buttons for steps 2 only (step 3 handled above) */}
-              {!loading && nextActions[step] && step > 1 && step !== 3 && (() => {
-                const na = nextActions[step];
-                return (
-                  <div className="mt-6 flex justify-end">
-                    <button onClick={na.action} className="btn-primary">
-                      <na.Icon size={16} />
-                      {na.label}
-                      <ChevronRight size={16} />
-                    </button>
-                  </div>
-                );
-              })()}
             </div>
           )}
         </main>
