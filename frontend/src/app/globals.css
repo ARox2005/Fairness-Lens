@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  body {
+    @apply font-sans antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white dark:bg-[#1A1D2E] rounded-xl border border-gray-200 dark:border-gray-700 shadow-card;
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:shadow-card-lg hover:border-brand-500/40;
+  }
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white
+           bg-gradient-to-r from-brand-600 to-accent-500
+           hover:from-brand-700 hover:to-accent-600
+           shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300
+           border border-gray-200 dark:border-gray-700
+           hover:bg-gray-200 dark:hover:bg-gray-700 transition-all cursor-pointer;
+  }
+  .stat-box {
+    @apply card p-4 flex-1 min-w-[140px];
+  }
+  .severity-low { @apply bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400; }
+  .severity-medium { @apply bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400; }
+  .severity-high { @apply bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400; }
+  .severity-critical { @apply bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400; }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+@keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+.animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+/* Recharts tooltip fix for dark mode */
+.dark .recharts-default-tooltip {
+  background-color: #1A1D2E !important;
+  border-color: #363B54 !important;
+}

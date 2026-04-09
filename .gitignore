@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.local
+
+# Node
+node_modules/
+.next/
+out/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Outputs
+*.pkl
+*.joblib
+*.pdf
+!backend/app/services/pdf_report.py
+
+# OS
+Thumbs.db

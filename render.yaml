@@ -1,0 +1,22 @@
+# Render.com blueprint — auto-deploys backend from GitHub
+# Free tier: 750 hours/month, sleeps after 15min idle
+
+services:
+  - type: web
+    name: fairnesslens-backend
+    runtime: python
+    region: singapore  # closest to India (Mumbai)
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        value: "https://fairnesslens.vercel.app,https://*.vercel.app"
+      - key: GOOGLE_API_KEY
+        sync: false  # Set manually in Render dashboard for security
