@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import { BarChart3, AlertTriangle, Wrench, ChevronRight, Bot, Swords, Shuffle } from "lucide-react";
+import { BarChart3, AlertTriangle, Wrench, ChevronRight, Bot, Swords, Shuffle, Brain } from "lucide-react";
 
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
@@ -10,6 +10,7 @@ import InspectStep from "@/components/steps/InspectStep";
 import MeasureStep from "@/components/steps/MeasureStep";
 import FlagStep from "@/components/steps/FlagStep";
 import FixStep from "@/components/steps/FixStep";
+import RLFixStep from "@/components/steps/RLFixStep";
 import AgentPanel from "@/components/steps/AgentPanel";
 import RedTeamPanel from "@/components/steps/RedTeamPanel";
 import CounterfactualPanel from "@/components/steps/CounterfactualPanel";
@@ -34,6 +35,8 @@ export default function Home() {
   const [agentMode, setAgentMode] = useState(false);
   const [redTeamMode, setRedTeamMode] = useState(false);
   const [counterfactualMode, setCounterfactualMode] = useState(false);
+  const [rlMode, setRlMode] = useState(false);
+  const [comparing, setComparing] = useState(false);
 
   // Data state
   const [datasetId, setDatasetId] = useState(null);
@@ -42,13 +45,15 @@ export default function Home() {
   const [measureData, setMeasureData] = useState(null);
   const [flagData, setFlagData] = useState(null);
   const [fixData, setFixData] = useState(null);
+  const [rlData, setRlData] = useState(null);
+  const [comparisonData, setComparisonData] = useState(null);
 
   // Completed steps for sidebar
   const completedSteps = [];
   if (inspectData) completedSteps.push(0, 1);
   if (measureData) completedSteps.push(2);
   if (flagData) completedSteps.push(3);
-  if (fixData) completedSteps.push(4);
+  if (fixData || rlData) completedSteps.push(4);
 
   // ── Step 1: Load demo dataset ──
   const handleDemoLoad = useCallback(async (demoId) => {
@@ -62,6 +67,8 @@ export default function Home() {
       setMeasureData(null);
       setFlagData(null);
       setFixData(null);
+      setRlData(null);
+      setComparisonData(null);
       setStep(1);
     } catch (e) {
       setError(e.message);
@@ -98,6 +105,8 @@ export default function Home() {
       setMeasureData(null);
       setFlagData(null);
       setFixData(null);
+      setRlData(null);
+      setComparisonData(null);
       setStep(1);
     } catch (e) {
       setError(e.message);
@@ -113,6 +122,8 @@ export default function Home() {
     setMeasureData(null);
     setFlagData(null);
     setFixData(null);
+    setRlData(null);
+    setComparisonData(null);
     setStep(1);
   }, []);
 
@@ -172,11 +183,12 @@ export default function Home() {
     setLoading(false);
   }, [datasetId, meta]);
 
-  // ── Step 4: Fix ──
+  // ── Step 4: Fix (standard mitigation) ──
   const runFix = useCallback(async () => {
     if (!datasetId || !meta) return;
     setLoading(true);
     setError(null);
+    setRlMode(false);
     try {
       const data = await apiFetch("/api/fix/", {
         method: "POST",
@@ -197,20 +209,69 @@ export default function Home() {
     setLoading(false);
   }, [datasetId, meta]);
 
+  // ── Step 4b: RL Fix Optimizer ──
+  const runRLFix = useCallback(async () => {
+    if (!datasetId || !meta) return;
+    setLoading(true);
+    setError(null);
+    setRlMode(true);
+    try {
+      const data = await apiFetch("/api/rl-fix/optimize", {
+        method: "POST",
+        body: JSON.stringify({
+          dataset_id: datasetId,
+          protected_attribute: meta.protected_attributes[0],
+          label_column: meta.label_column,
+          favorable_label: meta.favorable_label,
+        }),
+      });
+      setRlData(data);
+      setComparisonData(null);
+      setStep(4);
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, [datasetId, meta]);
+
+  // ── Step 4c: Compare RL vs Standard ──
+  const runComparison = useCallback(async () => {
+    if (!datasetId || !meta) return;
+    setComparing(true);
+    setError(null);
+    try {
+      const data = await apiFetch("/api/rl-fix/compare", {
+        method: "POST",
+        body: JSON.stringify({
+          dataset_id: datasetId,
+          protected_attribute: meta.protected_attributes[0],
+          label_column: meta.label_column,
+          favorable_label: meta.favorable_label,
+        }),
+      });
+      setComparisonData(data);
+    } catch (e) {
+      setError(e.message);
+    }
+    setComparing(false);
+  }, [datasetId, meta]);
+
   // Next action for each step
   const nextActions = [
-    null, // upload — handled by buttons
+    null,
     { label: "Run Fairness Metrics", action: runMeasure, Icon: BarChart3 },
     { label: "Flag Bias Issues", action: runFlag, Icon: AlertTriangle },
     { label: "Apply Mitigation", action: runFix, Icon: Wrench },
-    null, // fix — end of pipeline
+    null,
   ];
 
   const loadingMessages = [
     "Loading dataset and running inspection...",
     "Computing all fairness metrics...",
     "Generating bias flags and compliance checks...",
-    "Applying mitigation techniques...",
+    rlMode
+      ? "Training RL agent (this may take 30-60 seconds)..."
+      : "Applying mitigation techniques...",
     "Processing...",
   ];
 
@@ -243,7 +304,17 @@ export default function Home() {
               {step === 3 && counterfactualMode && (
                 <CounterfactualPanel datasetId={datasetId} meta={meta} />
               )}
-              {step === 4 && <FixStep data={fixData} inspectData={inspectData} measureData={measureData} flagData={flagData} datasetId={datasetId} />}
+              {step === 4 && !rlMode && (
+                <FixStep data={fixData} inspectData={inspectData} measureData={measureData} flagData={flagData} datasetId={datasetId} />
+              )}
+              {step === 4 && rlMode && (
+                <RLFixStep
+                  data={rlData}
+                  onCompare={runComparison}
+                  comparing={comparing}
+                  comparisonData={comparisonData}
+                />
+              )}
 
               {/* Counterfactual toggle + Apply Mitigation on Flag step */}
               {!loading && step === 3 && !counterfactualMode && (
@@ -258,6 +329,15 @@ export default function Home() {
                     <Shuffle size={16} /> Counterfactual Stories
                   </button>
                   <div className="flex-1" />
+                  <button
+                    onClick={runRLFix}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
+                               bg-gradient-to-r from-violet-600 to-fuchsia-500
+                               hover:from-violet-700 hover:to-fuchsia-600
+                               shadow-md transition-all cursor-pointer"
+                  >
+                    <Brain size={16} /> RL Optimizer
+                  </button>
                   <button onClick={runFix} className="btn-primary">
                     <Wrench size={16} /> Apply Mitigation <ChevronRight size={16} />
                   </button>
@@ -272,13 +352,22 @@ export default function Home() {
                     ← Back to Flags
                   </button>
                   <div className="flex-1" />
+                  <button
+                    onClick={() => { setCounterfactualMode(false); runRLFix(); }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
+                               bg-gradient-to-r from-violet-600 to-fuchsia-500
+                               hover:from-violet-700 hover:to-fuchsia-600
+                               shadow-md transition-all cursor-pointer"
+                  >
+                    <Brain size={16} /> RL Optimizer
+                  </button>
                   <button onClick={() => { setCounterfactualMode(false); runFix(); }} className="btn-primary">
                     <Wrench size={16} /> Apply Mitigation <ChevronRight size={16} />
                   </button>
                 </div>
               )}
 
-              {/* Mode toggles + Next step button (on Inspect step) */}
+              {/* Mode toggles on Inspect step */}
               {!loading && step === 1 && !agentMode && !redTeamMode && (
                 <div className="mt-6 space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -318,7 +407,57 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Next step buttons for steps 2-3 */}
+              {/* Toggle between Standard Fix and RL Fix on Step 4 */}
+              {!loading && step === 4 && (fixData || rlData) && (
+                <div className="mt-4 flex gap-2 flex-wrap">
+                  {fixData && (
+                    <button
+                      onClick={() => setRlMode(false)}
+                      className={`text-xs px-3 py-2 rounded-lg font-medium transition-all cursor-pointer
+                        ${!rlMode
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-700"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700"
+                        }`}
+                    >
+                      <Wrench size={12} className="inline mr-1" /> Standard Mitigation
+                    </button>
+                  )}
+                  {rlData && (
+                    <button
+                      onClick={() => setRlMode(true)}
+                      className={`text-xs px-3 py-2 rounded-lg font-medium transition-all cursor-pointer
+                        ${rlMode
+                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 border border-violet-300 dark:border-violet-700"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700"
+                        }`}
+                    >
+                      <Brain size={12} className="inline mr-1" /> RL Optimizer
+                    </button>
+                  )}
+                  <div className="flex-1" />
+                  {!rlData && (
+                    <button
+                      onClick={runRLFix}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white
+                                 bg-gradient-to-r from-violet-600 to-fuchsia-500
+                                 hover:from-violet-700 hover:to-fuchsia-600
+                                 shadow-sm transition-all cursor-pointer"
+                    >
+                      <Brain size={12} /> Also Try RL Optimizer
+                    </button>
+                  )}
+                  {!fixData && (
+                    <button
+                      onClick={runFix}
+                      className="btn-secondary text-xs"
+                    >
+                      <Wrench size={12} /> Also Try Standard
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Next step buttons for steps 2 only (step 3 handled above) */}
               {!loading && nextActions[step] && step > 1 && step !== 3 && (() => {
                 const na = nextActions[step];
                 return (

@@ -7,7 +7,7 @@ Google Solution Challenge 2026 India (Unbiased AI Decision theme).
 Pipeline: Inspect → Measure → Flag → Fix
 
 Tech stack: FastAPI + AIF360 + Fairlearn + Gemini API
-Deployed on: Google Cloud Run + Firebase
+Deployed on: Render (backend) + Vercel (frontend)
 """
 
 import os
@@ -17,7 +17,10 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import inspect, measure, flag, fix, report, model, agent, redteam, counterfactual
+from app.api.routes import (
+    inspect, measure, flag, fix, report, model,
+    agent, redteam, counterfactual, rl_fix,
+)
 
 # Load environment variables
 load_dotenv()
@@ -59,7 +62,7 @@ cors_origins = [o.strip() for o in cors_origins if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",  # allow any vercel preview URL
+    allow_origin_regex=r"https://.*\.vercel\.app",  # allow any Vercel preview URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,6 +78,7 @@ app.include_router(model.router)
 app.include_router(agent.router)
 app.include_router(redteam.router)
 app.include_router(counterfactual.router)
+app.include_router(rl_fix.router)
 
 
 # ── Health Check ──
