@@ -1,30 +1,30 @@
 # Core Framework
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-python-multipart==0.0.9
+fastapi
+uvicorn[standard]
+python-multipart
 
 # Data Processing
-pandas==2.2.2
-numpy==1.26.4
-scipy==1.13.1
+pandas
+numpy
+scipy
 
 # Fairness Libraries
-aif360==0.6.1
-fairlearn==0.10.0
+aif360
+fairlearn
 
 # ML & Explainability
-scikit-learn==1.5.1
-shap==0.45.1
-joblib==1.4.2
+scikit-learn
+shap
+joblib
 
 # Google Cloud / Gemini
-google-genai==1.0.0
-google-cloud-storage==2.18.0
-firebase-admin==6.5.0
+google-genai
+google-cloud-storage
+firebase-admin
 
 # PDF Report Generation
-reportlab==4.2.2
+reportlab
 
 # Utilities
-python-dotenv==1.0.1
-pydantic==2.8.0
+python-dotenv
+pydantic
