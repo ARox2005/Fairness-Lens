@@ -1,12 +1,13 @@
 "use client";
-import { Upload, Database, BarChart3, AlertTriangle, Wrench, Check } from "lucide-react";
+import { Upload, Database, BarChart3, AlertTriangle, Wrench, Shield, Check } from "lucide-react";
 
 const STEPS = [
-  { id: "upload",  label: "Upload",  icon: Upload,        desc: "Load dataset" },
-  { id: "inspect", label: "Inspect", icon: Database,      desc: "Profile data" },
-  { id: "measure", label: "Measure", icon: BarChart3,     desc: "Fairness metrics" },
-  { id: "flag",    label: "Flag",    icon: AlertTriangle,  desc: "Risk assessment" },
-  { id: "fix",     label: "Fix",     icon: Wrench,        desc: "Mitigate bias" },
+  { id: "upload",   label: "Upload",   icon: Upload,        desc: "Load dataset" },
+  { id: "inspect",  label: "Inspect",  icon: Database,      desc: "Profile data" },
+  { id: "measure",  label: "Measure",  icon: BarChart3,     desc: "Fairness metrics" },
+  { id: "flag",     label: "Flag",     icon: AlertTriangle, desc: "Risk assessment" },
+  { id: "fix",      label: "Fix",      icon: Wrench,        desc: "Mitigate bias" },
+  { id: "validate", label: "Validate", icon: Shield,        desc: "Deploy readiness" },
 ];
 
 export default function Sidebar({ step, setStep, completedSteps }) {
@@ -16,7 +17,8 @@ export default function Sidebar({ step, setStep, completedSteps }) {
         const Icon = s.icon;
         const isActive = step === i;
         const isCompleted = completedSteps.includes(i);
-        const isClickable = i === 0 || completedSteps.includes(i);
+        // Validate (index 5) can be reached after Inspect; other steps follow completion order
+        const isClickable = i === 0 || completedSteps.includes(i) || (i === 5 && completedSteps.includes(1));
 
         return (
           <button

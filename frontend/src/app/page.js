@@ -1,6 +1,8 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
-import { BarChart3, AlertTriangle, Wrench, ChevronRight, Bot, Swords, Shuffle, Brain } from "lucide-react";
+import {
+  BarChart3, AlertTriangle, Wrench, ChevronRight, Bot, Swords, Shuffle, Shield, Brain,
+} from "lucide-react";
 
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
@@ -14,7 +16,8 @@ import RLFixStep from "@/components/steps/RLFixStep";
 import AgentPanel from "@/components/steps/AgentPanel";
 import RedTeamPanel from "@/components/steps/RedTeamPanel";
 import CounterfactualPanel from "@/components/steps/CounterfactualPanel";
-import { apiFetch, apiUpload, DEMO_META } from "@/lib/api";
+import ValidateStep from "@/components/steps/ValidateStep";
+import { apiFetch, apiUpload, DEMO_META, wakeBackend } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -24,6 +27,11 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
+
+  // Wake backend on mount (handles Render cold start)
+  useEffect(() => {
+    wakeBackend();
+  }, []);
 
   // Pipeline state
   const [step, setStep] = useState(0);
@@ -40,6 +48,7 @@ export default function Home() {
   const [measureData, setMeasureData] = useState(null);
   const [flagData, setFlagData] = useState(null);
   const [fixData, setFixData] = useState(null);
+  const [validateData, setValidateData] = useState(null);
 
   // RL state
   const [rlData, setRlData] = useState(null);
@@ -53,6 +62,18 @@ export default function Home() {
   if (measureData) completedSteps.push(2);
   if (flagData) completedSteps.push(3);
   if (fixData || rlData) completedSteps.push(4);
+  if (validateData) completedSteps.push(5);
+
+  // Helper to reset all downstream state when loading a new dataset
+  const resetPipelineData = () => {
+    setMeasureData(null);
+    setFlagData(null);
+    setFixData(null);
+    setRlData(null);
+    setRlMode(false);
+    setComparisonData(null);
+    setValidateData(null);
+  };
 
   // ── Step 1: Load demo dataset ──
   const handleDemoLoad = useCallback(async (demoId) => {
@@ -63,12 +84,7 @@ export default function Home() {
       setInspectData(data);
       setDatasetId(data.dataset_id);
       setMeta(DEMO_META[demoId] || DEMO_META.adult);
-      setMeasureData(null);
-      setFlagData(null);
-      setFixData(null);
-      setRlData(null);
-      setRlMode(false);
-      setComparisonData(null);
+      resetPipelineData();
       setStep(1);
     } catch (e) {
       setError(e.message);
@@ -102,12 +118,7 @@ export default function Home() {
         label_column: csvMeta?.label_column || "",
         favorable_label: csvMeta?.favorable_label || "",
       });
-      setMeasureData(null);
-      setFlagData(null);
-      setFixData(null);
-      setRlData(null);
-      setRlMode(false);
-      setComparisonData(null);
+      resetPipelineData();
       setStep(1);
     } catch (e) {
       setError(e.message);
@@ -120,16 +131,11 @@ export default function Home() {
     setInspectData(inspectResult);
     setDatasetId(newDatasetId);
     setMeta(newMeta);
-    setMeasureData(null);
-    setFlagData(null);
-    setFixData(null);
-    setRlData(null);
-    setRlMode(false);
-    setComparisonData(null);
+    resetPipelineData();
     setStep(1);
   }, []);
 
-  // ── Agent mode ──
+  // ── Agent mode: populate all data from agent results ──
   const handleAgentComplete = useCallback((agentResult) => {
     if (agentResult.inspect_data) setInspectData(agentResult.inspect_data);
     if (agentResult.measure_data) setMeasureData(agentResult.measure_data);
@@ -204,6 +210,7 @@ export default function Home() {
         }),
       });
       setFixData(data);
+      setValidateData(null);  // invalidate stale validation
       setStep(4);
     } catch (e) {
       setError(e.message);
@@ -237,6 +244,7 @@ export default function Home() {
       }
       const data = await res.json();
       setRlData(data);
+      setValidateData(null);  // invalidate stale validation
       setStep(4);
     } catch (e) {
       setError(e.message);
@@ -279,6 +287,7 @@ export default function Home() {
       ? "Training DQN agent — discovering optimal mitigation sequence..."
       : "Applying mitigation techniques...",
     "Processing...",
+    "Running deployment validation tests...",
   ];
 
   return (
@@ -296,8 +305,14 @@ export default function Home() {
           ) : (
             <div>
               {step === 0 && (
-                <UploadStep onDemoLoad={handleDemoLoad} onFileUpload={handleFileUpload} onModelUpload={handleModelUpload} loading={loading} />
+                <UploadStep
+                  onDemoLoad={handleDemoLoad}
+                  onFileUpload={handleFileUpload}
+                  onModelUpload={handleModelUpload}
+                  loading={loading}
+                />
               )}
+
               {step === 1 && !agentMode && !redTeamMode && <InspectStep data={inspectData} />}
               {step === 1 && agentMode && (
                 <AgentPanel datasetId={datasetId} meta={meta} onAuditComplete={handleAgentComplete} />
@@ -305,7 +320,9 @@ export default function Home() {
               {step === 1 && redTeamMode && (
                 <RedTeamPanel datasetId={datasetId} meta={meta} />
               )}
+
               {step === 2 && <MeasureStep data={measureData} />}
+
               {step === 3 && !counterfactualMode && <FlagStep data={flagData} />}
               {step === 3 && counterfactualMode && (
                 <CounterfactualPanel datasetId={datasetId} meta={meta} />
@@ -313,7 +330,14 @@ export default function Home() {
 
               {/* Step 4: Standard Fix or RL Fix */}
               {step === 4 && !rlMode && (
-                <FixStep data={fixData} inspectData={inspectData} measureData={measureData} flagData={flagData} datasetId={datasetId} />
+                <FixStep
+                  data={fixData}
+                  inspectData={inspectData}
+                  measureData={measureData}
+                  flagData={flagData}
+                  validateData={validateData}
+                  datasetId={datasetId}
+                />
               )}
               {step === 4 && rlMode && (
                 <RLFixStep
@@ -321,6 +345,15 @@ export default function Home() {
                   onCompare={runComparison}
                   comparing={comparing}
                   comparisonData={comparisonData}
+                />
+              )}
+
+              {step === 5 && (
+                <ValidateStep
+                  datasetId={datasetId}
+                  meta={meta}
+                  initialResult={validateData}
+                  onComplete={(data) => setValidateData(data)}
                 />
               )}
 
@@ -375,7 +408,8 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Step 4: toggle between views + try the other approach */}
+              {/* ═══ FIX STEP BOTTOM BUTTONS ═══ */}
+              {/* Toggle between Standard and RL views + "Try the other one" buttons + Validate */}
               {!loading && step === 4 && (fixData || rlData) && (
                 <div className="mt-6 flex flex-wrap gap-2">
                   {rlMode && fixData && (
@@ -410,10 +444,20 @@ export default function Home() {
                       <Wrench size={14} /> Also Try Standard Mitigation
                     </button>
                   )}
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => setStep(5)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white
+                               bg-gradient-to-r from-indigo-600 to-blue-500
+                               hover:from-indigo-700 hover:to-blue-600
+                               shadow-md transition-all cursor-pointer"
+                  >
+                    <Shield size={16} /> Validate for Deployment <ChevronRight size={16} />
+                  </button>
                 </div>
               )}
 
-              {/* Inspect step: mode toggles + next */}
+              {/* ═══ INSPECT STEP MODE TOGGLES ═══ */}
               {!loading && step === 1 && !agentMode && !redTeamMode && (
                 <div className="mt-6 space-y-3">
                   <div className="flex flex-wrap gap-2">
@@ -453,7 +497,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Next step button for step 2 */}
+              {/* Next step button for step 2 only (step 3 & 4 handled above) */}
               {!loading && step === 2 && (
                 <div className="mt-6 flex justify-end">
                   <button onClick={runFlag} className="btn-primary">
