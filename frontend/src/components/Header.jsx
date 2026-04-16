@@ -1,7 +1,13 @@
 "use client";
 import { Shield, Sun, Moon } from "lucide-react";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+
 
 export default function Header({ dark, setDark }) {
+  const pathname = usePathname();
+  const isAbout = pathname === '/about';
   return (
     <header className="bg-white dark:bg-[#1A1D2E] border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center sticky top-0 z-50 shadow-card">
       <div className="flex items-center gap-3">
@@ -13,13 +19,21 @@ export default function Header({ dark, setDark }) {
           <div className="text-[10px] text-gray-400 uppercase tracking-widest">AI Bias Detection & Mitigation</div>
         </div>
       </div>
-      <button
-        onClick={() => setDark(!dark)}
-        className="btn-secondary text-xs"
-      >
-        {dark ? <Sun size={14} /> : <Moon size={14} />}
-        {dark ? "Light" : "Dark"}
-      </button>
+      <div className="flex items-center gap-3">
+        <Link 
+          href={isAbout ? "/" : "/about"}
+          className="btn-secondary text-xs"
+        >
+          {isAbout ? "Back to App" : "About"}
+        </Link>
+        <button
+          onClick={() => setDark(!dark)}
+          className="btn-secondary text-xs"
+        >
+          {dark ? <Sun size={14} /> : <Moon size={14} />}
+          {dark ? "Light" : "Dark"}
+        </button>
+      </div>
     </header>
   );
 }

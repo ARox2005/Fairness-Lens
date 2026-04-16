@@ -146,7 +146,7 @@ export default function FixStep({ data, inspectData, measureData, flagData, data
       {data.gemini_explanation && (
         <div className="card p-4 bg-gray-50 dark:bg-gray-800/30 border-purple-200 dark:border-purple-700/40">
           <div className="text-[13px] font-semibold text-purple-600 dark:text-purple-400 mb-2">
-            ✦ AI-Powered Analysis (Gemini)
+            ✦ AI-Powered Analysis (Gemma)
           </div>
           <div className="text-[13px] text-gray-700 dark:text-gray-300 leading-relaxed">{data.gemini_explanation}</div>
         </div>
